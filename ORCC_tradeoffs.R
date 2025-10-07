@@ -1446,7 +1446,7 @@ T1_noise$genotype<-factor(T1_noise$genotype,levels=c("62", "44", "31", "7", "13"
 
 T1_noiseplot <- ggplot(T1_noise, aes(x = genotype, y = distance))+
   geom_boxplot(outlier.shape = NA)+
-  geom_jitter(aes(color = genotype, shape = site))+
+  geom_jitter(aes(color = genotype, shape = site), size = 3)+
   scale_color_manual(values = geno_colors)+
   theme_light()+
   theme(panel.grid.major = element_blank(), 
@@ -1455,7 +1455,8 @@ T1_noiseplot <- ggplot(T1_noise, aes(x = genotype, y = distance))+
         axis.title=element_text(size=15),
         legend.position = "none")+
   ylab("Noise (Distance to Centroid)")+
-  xlab("")
+  xlab("")+
+  facet_wrap(~site, ncol= 1)
 T1_noiseplot
 
 T2_noise <- noise%>%
@@ -1465,7 +1466,7 @@ T2_noise$genotype<-factor(T2_noise$genotype,levels=c("44", "31", "62", "13", "50
 
 T2_noiseplot <- ggplot(T2_noise, aes(x = genotype, y = distance))+
   geom_boxplot(outlier.shape = NA)+
-  geom_jitter(aes(color = genotype, shape = site))+
+  geom_jitter(aes(color = genotype, shape = site), size =3)+
   scale_color_manual(values = geno_colors)+
   theme_light()+
   theme(panel.grid.major = element_blank(), 
@@ -1474,7 +1475,8 @@ T2_noiseplot <- ggplot(T2_noise, aes(x = genotype, y = distance))+
         axis.title=element_text(size=15),
         legend.position = "none")+
   ylab("")+
-  xlab("Genotype")
+  xlab("Genotype")+
+  facet_wrap(~site, ncol= 1)
 T2_noiseplot
 
 T3_noise <- noise%>%
@@ -1484,7 +1486,7 @@ T3_noise$genotype<-factor(T3_noise$genotype,levels=c("62", "31", "13", "50", "44
 
 T3_noiseplot <- ggplot(T3_noise, aes(x = genotype, y = distance))+
   geom_boxplot(outlier.shape = NA)+
-  geom_jitter(aes(color = genotype, shape = site))+
+  geom_jitter(aes(color = genotype, shape = site), size =3)+
   scale_color_manual(values = geno_colors)+
   theme_light()+
   theme(panel.grid.major = element_blank(), 
@@ -1492,7 +1494,8 @@ T3_noiseplot <- ggplot(T3_noise, aes(x = genotype, y = distance))+
         axis.text=element_text(size=14),
         axis.title=element_text(size=15))+
   ylab("")+
-  xlab("")
+  xlab("")+
+  facet_wrap(~site, ncol= 1)
 T3_noiseplot
 
 noise_composite <- plot_grid(T1_noiseplot, T2_noiseplot, T3_noiseplot, nrow = 1, rel_widths = c(1,1,1.3))

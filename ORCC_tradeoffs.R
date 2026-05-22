@@ -76,6 +76,18 @@ site_map <- ggplot(Fl_sf) +
                          style = north_arrow_fancy_orienteering())
 site_map
 
+## nursery vs reef sites ####
+# light
+light_data <- read_xlsx("Field_lightData.xlsx")%>%
+  clean_names()
+
+ggplot(light_data, aes(x = depth_ft, y = avg))+
+  geom_point(size = 8, alpha = 0.7, aes(shape = site))+
+  scale_shape_manual(values = c(16, 17, 8))+
+  theme_light(base_size = 16)+
+  xlab("Depth (ft)")+
+  ylab("PAR")
+
 ##temperature data ####
 looe.temps <-read.csv("Carly_Looe_2023.09.12.csv")%>%
   clean_names()%>%
@@ -392,6 +404,22 @@ growth_months <- full_join(oct_outplant, jan_outplant)%>%
   mutate(sav = sa/volume)%>%
   mutate_at("array", as.factor)
 
+# test for differences in attachment failure between sites in Jan
+attachment <- full_join(oct_outplant, jan_outplant)%>%
+  filter(timepoint == "T1")%>%
+  select(site, genotype, tag_number, outplant_date)%>%
+  unique()%>%
+  mutate_at("site", as.factor)%>%
+  mutate_at("genotype", as.factor)%>%
+  mutate(failure = case_when(outplant_date == "Oct" ~ 0, outplant_date == "Jan" ~ 1))
+
+fail_model <- glm(failure ~ site * genotype, data = attachment, family = binomial)
+anova(fail_model, test = "Chisq")
+# none significant: 
+# site: p = 0.053
+# genotype: p = 0.055
+# interaction: p = 1.0
+
 # initial sizes
 initial.size <- growth_months%>%
   filter(timepoint == "T0")
@@ -585,7 +613,7 @@ other_growth
 
 ## linear models ####
 
-#need to include initial size as a random factor for size metrics
+#need to include initial size as a covariate for size metrics
 initial_size <-initial.size %>% 
   select(tag_number, tle, sa, volume, sav)%>%
   rename(initial_tle = tle)%>%
@@ -606,7 +634,7 @@ write.csv(all_morphology, file = "ORCC_morphology.csv")
 model_data <- size_data%>%
   filter(growth >0)
 
-growth.model = lmer(growth ~ timepoint*genotype*site + (1|array) + (1|initial_tle), data=model_data)
+growth.model = lmer(growth ~ initial_tle + timepoint*genotype*site + (1|tag_number), data=model_data)
 
 #check assumptions
 qqPlot(residuals(growth.model)) #normality
@@ -614,7 +642,9 @@ leveneTest(residuals(growth.model)~model_data$timepoint*model_data$genotype*mode
 
 summary(growth.model) #view coefficients and se, do not use the p-values from this output. In this output look for the amount of deviance accounted for by the random effects
 rand(growth.model) # array does play a role - but we are accounting for this in the model
-anova(growth.model, type =3) # use this view significant effects and get p-values
+
+growth.m2 <- lmerTest::as_lmerModLmerTest(growth.model)
+anova(growth.m2, type =3, ddf="Satterthwaite") # use this view significant effects and get p-values
 
 boxplot(growth ~ timepoint, dat = model_data)
 
@@ -623,9 +653,8 @@ boxplot(growth ~ timepoint, dat = model_data)
 ggplot(aes(x = tle), data = size_data)+
   geom_density()
 
-tle.model = lmer(1/tle ~ timepoint*genotype*site + (1|array) + (1|initial_tle), data=size_data)
+tle.model = lmer(1/tle ~ initial_tle + timepoint*genotype*site + (1|tag_number), data=size_data)
 
-rand(tle.model)
 #check assumptions
 qqPlot(residuals(tle.model)) #normality
 leveneTest(residuals(tle.model)~size_data$timepoint*size_data$genotype*size_data$site)
@@ -638,23 +667,21 @@ anova(tle.model, type =3) # use this view significant effects and get p-values
 ggplot(aes(x = volume), data = size_data)+
   geom_density()
 
-vol.model = lmer(1/volume ~ timepoint*genotype*site + (1|array) + (1|initial_vol), data=size_data)
+vol.model = lmer(1/volume ~ initial_vol + timepoint*genotype*site + (1|tag_number), data=size_data)
 
-rand(vol.model)
 #check assumptions
 qqPlot(residuals(vol.model))
 leveneTest(residuals(vol.model)~size_data$timepoint*size_data$genotype*size_data$site)
 
 summary(vol.model) #view coefficients and se, do not use the p-values from this output. In this output look for the amount of deviance accounted for by the random effects
 anova(vol.model, type=3) #use this to view significant effects/interactions and get p-values
-# sig effect of genotype and timepoint
 
 # SA
 # density plot to see how we might need to transform the data
 ggplot(aes(x = sa), data = size_data)+
   geom_density()
 
-sa.model = lmer(1/sa ~ timepoint*genotype*site + (1|array) + (1|initial_sa), data=size_data)
+sa.model = lmer(1/sa ~ initial_sa + timepoint*genotype*site + (1|tag_number), data=size_data)
 
 #check assumptions
 qqPlot(residuals(sa.model))
@@ -662,14 +689,13 @@ leveneTest(residuals(sa.model)~size_data$timepoint*size_data$genotype*size_data$
 
 summary(sa.model) #view coefficients and se, do not use the p-values from this output. In this output look for the amount of deviance accounted for by the random effects
 anova(sa.model, type=3) #use this to view significant effects/interactions and get p-values
-# sig effect of genotype and timepoint
 
 # SA:V
 # density plot to see how we might need to transform the data
 ggplot(aes(x = sav), data = size_data)+
   geom_density()
 
-sav.model = lmer(sav ~ timepoint*genotype*site + (1|array) + (1|initial_sav), data=size_data)
+sav.model = lmer(sav ~ initial_sav + timepoint*genotype*site + (1|tag_number), data=size_data)
 
 #check assumptions
 qqPlot(residuals(sav.model))
@@ -684,14 +710,10 @@ anova(sav.model, type=3) #use this to view significant effects/interactions and 
 # let's try modeling size/growth rates for just the June timepoint
 # can't include T0 size in model bc of same number of observations as grouping factor - so need to subtract initial size
 june_size <- size_data%>%
-  filter(timepoint =="3")%>%
-  mutate(model_tle = tle - initial_tle)%>%
-  mutate(model_vol = volume - initial_vol)%>%
-  mutate(model_sa = sa - initial_sa)%>%
-  mutate(model_sav = sav - initial_sav)
+  filter(timepoint =="3")
 
 # TLE
-tle.jun.model = lmer(1/model_tle ~ genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
+tle.jun.model = lmer(tle ~ initial_tle + genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
 
 #check assumptions
 qqPlot(residuals(tle.jun.model))
@@ -702,7 +724,7 @@ anova(tle.jun.model, type=3) #use this to view significant effects/interactions 
 # no sig effects
 
 # volume
-vol.jun.model = lmer(model_vol ~ genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
+vol.jun.model = lmer(volume ~ initial_vol + genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
 
 #check assumptions
 qqPlot(residuals(vol.jun.model))
@@ -713,7 +735,7 @@ anova(vol.jun.model, type=3) #use this to view significant effects/interactions 
 # sig effect of genotype, site, genotype x site
 
 # SA
-sa.jun.model = lmer(model_sa ~ genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
+sa.jun.model = lmer(sa ~ initial_sa + genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
 
 #check assumptions
 qqPlot(residuals(sa.jun.model))
@@ -724,7 +746,7 @@ anova(sa.jun.model, type=3) #use this to view significant effects/interactions a
 # sig effect of genotype, genotype x site
 
 # SA:V
-sav.jun.model = lmer(model_sav ~ genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
+sav.jun.model = lmer(sav ~ initial_sav + genotype*site + (1|array), data=june_size) # cant include T0 size in model bc same number of observations in y
 
 #check assumptions
 qqPlot(residuals(sav.jun.model))
@@ -1167,28 +1189,31 @@ morpho.data <- read.csv("ORCC_morphology.csv", header=TRUE)%>%
   mutate(model_sa = sa - initial_sa)%>%
   mutate(model_sav = sav - initial_sav)
 
-# create matrix with relevant traits and explanatory variables
-morpho <- morpho.data[c("model_tle", "model_sa", "model_vol", "model_sav", "growth_pos","breakage_net", "breakage_type")] 
-time <- (morpho.data$timepoint)
+morpho <- morpho.data[c("tle", "sa", "volume", "sav", "growth_pos","breakage_net", "breakage_type")] 
+time <- morpho.data$timepoint
+initialTLE <- morpho.data$initial_tle
 site <- morpho.data$site
 genotype <- as.character(morpho.data$genotype)
 
-#RDA
-morpho_rda <- rda(morpho ~ genotype + site + genotype:site + Condition(time), na.action=na.exclude, scale = TRUE)
+morpho_rda <- rda(morpho ~ genotype + site + genotype:site + Condition(time) + Condition(initialTLE), na.action=na.exclude, scale = TRUE)
 head(summary(morpho_rda))
-#timepoint explains 11.15% of the variance
-# other variables explain 8.82% of the variance
+#timepoint and initial size explains 1.11/7 Chi of the variance --> ~15.8%
+# other variables explain 0.667/7 Chi of the variance --> ~9.5%
+
+# constrained Chi = 0.667
+# RDA1: 0.37441/0.667 =  0.561 = ~56.1% of constrained variation
+# RDA2: 0.21133/0.667 = 0.317 = 31.7% of constrained variation
 
 RsquareAdj(morpho_rda)
-# 0.08826938
+# 0.09529551
 
 anova.cca(morpho_rda, by = "terms")
 # genotype: p = 0.001
-# genotype x site: p = 0.001
+# genotype x site: p = 0.025
 
 anova.cca(morpho_rda, by = "axis")
 # RDA1 = 0.001
-# RDA2 = 0.503
+# RDA2 = 0.001
 
 # visualize
 coords <- as.matrix(scores(morpho_rda)$sites)
@@ -1210,15 +1235,16 @@ morpho2$genotype<-factor(morpho2$genotype,levels=c("1","3","7","13","31","36","4
 
 morpho2$timepoint<-factor(morpho2$timepoint,levels=c("T3", "T2", "T1"))
 
+
 # plot all points for figure 2a
 morpho_plot <- ggplot(morpho2)+
   scale_color_manual(values = c("#FED439FF", "#709AE1FF", "#8A9197FF", "#D2AF81FF", "#FD7446FF", "#D5E4A2FF","#197EC0FF", "#C80813FF", "#46732EFF","#71D0F5FF"))+
   theme_light()+ 
-  geom_point(aes(x=RDA1, y = RDA2, color=as.factor(genotype), shape = site), size = 2.5) +
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  geom_point(aes(x=RDA1, y = RDA2, color=as.factor(genotype), shape = site), size = 2.5, alpha = 0.7) +
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   stat_ellipse(aes(x=RDA1, y = RDA2, alpha = timepoint), color = "darkblue", linewidth = 1)+
-  geom_segment(data=arrows, aes(x = 0, xend = RDA1, y = 0, yend = RDA2), color = "grey30", linewidth =0.8,arrow = arrow(length = unit(0.25, "cm")))+
+  geom_segment(data=arrows, aes(x = 0, xend = RDA1, y = 0, yend = RDA2), color = "black", linewidth =0.8,arrow = arrow(length = unit(0.25, "cm")))+
   guides(color=guide_legend(ncol=2))+
   theme(axis.text=element_text(size=14),
         axis.title=element_text(size=15),
@@ -1230,8 +1256,8 @@ morpho_plot
 vector_panel <- ggplot(morpho2)+
   geom_segment(data=arrows, aes(x = 0, xend = RDA1, y = 0, yend = RDA2), arrow = arrow(length = unit(0.25, "cm"))) +
   geom_text_repel(data=arrows, aes(x = RDA1, y = RDA2, label = names))+
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   scale_x_continuous(lim = c(-4,2))+
   scale_y_continuous(lim = c(-6,3))+
   theme_classic()
@@ -1277,8 +1303,8 @@ example62 <- ggplot(example)+
   geom_point(aes(x = mean_RDA1, y = mean_RDA2, color=as.factor(genotype), shape = site), size = 5.5) +
   geom_point(aes(x = RDA1, y = RDA2, color=as.factor(genotype), shape = site), size = 2, alpha=0.5,show.legend = FALSE) +
   geom_text_repel(data = individual_labels, aes(x = mean_RDA1, y = mean_RDA2, label = timepoint), size=5)+
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   theme(axis.text=element_text(size=14),
         axis.title=element_text(size=15),
         panel.grid.major = element_blank(), 
@@ -1294,8 +1320,8 @@ supplement62 <- ggplot(example)+
   geom_point(aes(x = mean_RDA1, y = mean_RDA2, color=as.factor(genotype), shape = site), size = 5.5) +
   geom_point(aes(x = RDA1, y = RDA2, color=as.factor(genotype), shape = site), size = 2, alpha=0.5,show.legend = FALSE) +
   facet_wrap(~timepoint)+
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   theme(axis.text=element_text(size=14),
         axis.title=element_text(size=15),
         panel.grid.major = element_blank(), 
@@ -1324,8 +1350,8 @@ plot1 <- ggplot(toPlot)+
   geom_point(aes(x = mean_RDA1, y = mean_RDA2, color=as.factor(genotype), shape = site), size = 5.5) +
   geom_point(aes(x = RDA1, y = RDA2, color=as.factor(genotype), shape = site), size = 2, alpha=0.5,show.legend = FALSE) +
  geom_text_repel(data = individual_labels, aes(x = mean_RDA1, y = mean_RDA2, label = timepoint), size=5)+
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   theme(axis.text=element_text(size=14),
         axis.title=element_text(size=15),
         panel.grid.major = element_blank(), 
@@ -1403,8 +1429,8 @@ morpho4 <- morpho3%>%
     genotype == 31 ~ "high",
     genotype == 13 ~ "high",
     genotype == 50 ~ "high",
-    genotype == 44 ~ "high",
-    genotype == 7 ~ "low",
+    genotype == 44 ~ "low",
+    genotype == 7 ~ "high",
     genotype == 3 ~ "low",
     genotype == 41 ~ "low",
     genotype == 1 ~ "low",
@@ -1418,8 +1444,8 @@ contrast_plot <-ggplot(morpho4)+
  geom_point(aes(x = RDA1, y = RDA2, color=as.factor(genotype), shape = site), alpha = 0.5,size = 2) +
   stat_ellipse(aes(x=RDA1, y = RDA2, alpha = timepoint), color = "darkblue", linewidth = 1)+
   guides(color = guide_legend(ncol =2))+
-  ylab("RDA2 (20.66%)")+
-  xlab("RDA1 (59.08%)")+
+  ylab("RDA2 (31.7%)")+
+  xlab("RDA1 (56.1%)")+
   facet_wrap(~plast_level)+
   theme(axis.text=element_text(size=14),
         axis.title=element_text(size=15),

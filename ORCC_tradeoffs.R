@@ -1211,6 +1211,9 @@ anova.cca(morpho_rda, by = "terms")
 # genotype: p = 0.001
 # genotype x site: p = 0.025
 
+anova.cca(morpho_rda, by = "margin")
+# genotype x site: p = 0.032
+
 anova.cca(morpho_rda, by = "axis")
 # RDA1 = 0.001
 # RDA2 = 0.001
